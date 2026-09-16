@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+server.log
+state.json
+config.yaml
+.volume_ecran
+snap/snap
+snap/shots/
+snap/modes/
+snap/t/
+snap/c/
+snap/f/

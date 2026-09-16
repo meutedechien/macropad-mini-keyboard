@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Macropad</title>
+<style>
+  :root {
+    --bg: #eceae5; --card: #fff; --ink: #1b1b1d; --mute: #6d6d73; --line: #dcdad4;
+    --accent: #d9480f; --ok: #2f9e44; --err: #e03131;
+    --body1: #6b6f75; --body2: #2e3136; --cap1: #fbfbfa; --cap2: #d9d8d4;
+    --glow: 0,0,0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141416; --card: #1e1e21; --ink: #f1f1f2; --mute: #97979d; --line: #34343a;
+      --body1: #4a4d53; --body2: #202227; --cap1: #e8e8e6; --cap2: #b9b8b4;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141416; --card: #1e1e21; --ink: #f1f1f2; --mute: #97979d; --line: #34343a;
+    --body1: #4a4d53; --body2: #202227; --cap1: #e8e8e6; --cap2: #b9b8b4;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .wrap { max-width: 900px; margin: 0 auto; padding-block: 28px; padding-left: 20px; padding-right: 20px;
+          display: grid; gap: 20px; }
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 21px; margin: 0; letter-spacing: -.01em; }
+  .status { font-size: 13px; color: var(--mute); display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--err); }
+  .dot.on { background: var(--ok); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--mute); margin: 0 0 14px; }
+
+  /* Le macropad dessiné */
+  .stage { display: flex; justify-content: center; padding: 34px 16px 46px;
+           background: radial-gradient(120% 130% at 50% 0%, #26262b 0%, #121215 100%);
+           border-radius: 16px; overflow: hidden; }
+  .device { position: relative; display: flex; align-items: center; gap: 20px;
+            padding: 18px 22px; border-radius: 16px;
+            background: linear-gradient(170deg, var(--body1), var(--body2));
+            box-shadow: 0 18px 30px -12px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,255,255,.22); }
+  .device::after {  /* la lueur des LED sous le boîtier */
+    content: ""; position: absolute; left: 12%; right: 12%; bottom: -26px; height: 40px;
+    border-radius: 50%; filter: blur(16px); opacity: .85;
+    background: rgba(var(--glow), .55); transition: background .4s; }
+  .knobwrap { display: flex; align-items: center; gap: 10px; }
+  .arrow { width: 26px; height: 46px; border: 0; border-radius: 8px; cursor: pointer;
+           background: rgba(255,255,255,.07); color: #e9e9ea; font-size: 15px; }
+  .arrow:hover { background: rgba(255,255,255,.16); }
+  .arrow.sel { outline: 2px solid var(--accent); }
+  .knob { width: 74px; height: 74px; border-radius: 50%; border: 0; cursor: pointer; padding: 0;
+          background:
+            radial-gradient(circle at 50% 38%, #f2f2f0 0 26%, transparent 27%),
+            repeating-conic-gradient(#cfcec9 0 3deg, #97968f 3deg 6deg);
+          box-shadow: inset 0 -3px 6px rgba(0,0,0,.45), 0 3px 6px rgba(0,0,0,.5); }
+  .knob.sel { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .caps { display: flex; gap: 12px; }
+  .cap { width: 88px; height: 88px; border: 0; border-radius: 9px; cursor: pointer; padding: 6px;
+         display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+         background: linear-gradient(180deg, var(--cap1), var(--cap2));
+         box-shadow: 0 5px 0 rgba(0,0,0,.45), inset 0 2px 3px rgba(255,255,255,.9);
+         color: #26262a; font: inherit; transition: transform .08s, box-shadow .08s; }
+  .cap:active { transform: translateY(3px); box-shadow: 0 2px 0 rgba(0,0,0,.45); }
+  .cap .num { font-size: 10px; letter-spacing: .1em; color: #8a8a8f; }
+  .cap .txt { font-size: 12.5px; font-weight: 600; text-align: center; line-height: 1.25;
+              overflow-wrap: anywhere; }
+  .cap.sel { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+  /* Éditeur */
+  .cols { display: grid; grid-template-columns: 1fr; gap: 20px; }
+  @media (min-width: 760px) { .cols { grid-template-columns: 1fr 1fr; } }
+  .tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+  .tabs button, .btn { font: inherit; padding: 7px 13px; border-radius: 9px; border: 1px solid var(--line);
+         background: transparent; color: var(--ink); cursor: pointer; }
+  .tabs button:hover, .btn:hover { border-color: var(--mute); }
+  .tabs button.on { background: var(--ink); color: var(--card); border-color: var(--ink); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .chord { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 9px 0;
+           border-bottom: 1px dashed var(--line); }
+  .mods label { display: inline-flex; align-items: center; gap: 3px; margin-right: 8px; font-size: 14px; }
+  select, input[type=text] { font: inherit; padding: 6px 9px; border-radius: 9px; border: 1px solid var(--line);
+         background: var(--card); color: var(--ink); max-width: 100%; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+  .hint { color: var(--mute); font-size: 13px; }
+  .hint code { background: rgba(125,125,135,.16); padding: 1px 5px; border-radius: 5px; }
+  .capture.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .leds { display: flex; gap: 8px; flex-wrap: wrap; }
+  .leds .btn.on { outline: 2px solid var(--accent); }
+  #msg { min-height: 1.4em; font-size: 14px; }
+  #msg.ok { color: var(--ok); } #msg.err { color: var(--err); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Macropad</h1>
+    <span class="status"><span class="dot" id="dot"></span><span id="devtxt">…</span></span>
+  </header>
+
+  <div class="stage"><div class="device" id="pad"></div></div>
+
+  <div class="cols">
+    <section class="card">
+      <h2 id="edtitle">Touche</h2>
+      <div class="tabs" id="kinds">
+        <button data-k="keys">Clavier</button>
+        <button data-k="media">Multimédia</button>
+        <button data-k="mouse">Souris</button>
+        <button data-k="action">Action Mac</button>
+      </div>
+      <div id="editor"></div>
+    </section>
+
+    <section class="card">
+      <h2>Éclairage</h2>
+      <div class="leds" id="leds"></div>
+      <p class="hint">Pas de couleur au choix sur ce modèle. « 🎲 Autre couleur » en fige une au hasard (rouge, jaune, vert, cyan, bleu, violet) : reclique jusqu'à celle qui te plaît. Tu peux aussi lancer le défilement et figer au bon moment.</p>
+    </section>
+  </div>
+
+  <section class="card">
+    <div class="row" style="margin-top:0">
+      <button class="btn primary" id="upload">Écrire dans le clavier</button>
+      <input type="text" id="test" placeholder="Zone de test : appuie sur les touches ici" style="flex:1;min-width:200px">
+    </div>
+    <div id="msg"></div>
+  </section>
+</div>
+
+<script>
+const MODS = [["ctrl","Ctrl"],["shift","Maj"],["alt","Option"],["cmd","Cmd"]];
+const KEYS = "a b c d e f g h i j k l m n o p q r s t u v w x y z 1 2 3 4 5 6 7 8 9 0 enter escape backspace tab space minus equal leftbracket rightbracket backslash semicolon quote grave comma dot slash capslock f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13 f14 f15 f16 f17 f18 f19 f20 f21 f22 f23 f24 printscreen scrolllock pause insert home pageup delete end pagedown right left down up numlock numpadslash numpadasterisk numpadminus numpadplus numpadenter numpad1 numpad2 numpad3 numpad4 numpad5 numpad6 numpad7 numpad8 numpad9 numpad0 numpaddot numpadequal application power".split(" ");
+const MEDIA = [["play","Lecture/Pause"],["next","Suivant"],["prev","Précédent"],["stop","Stop"],["mute","Muet"],["volumeup","Volume +"],["volumedown","Volume −"],["screenlock","Verrouiller"],["calculator","Calculatrice"],["favorites","Favoris"]];
+const MOUSE = [["click","Clic gauche"],["rclick","Clic droit"],["mclick","Clic milieu"],["wheelup","Molette ↑"],["wheeldown","Molette ↓"]];
+const LED_MODES = [[0,"Éteint"],[2,"🌈 Défilement couleurs"],[1,"⏸ Figer cette couleur (respiration)"]];
+const SLOTS = [
+  {id:"b0", name:"Touche 1"}, {id:"b1", name:"Touche 2"}, {id:"b2", name:"Touche 3"},
+  {id:"ccw", name:"Molette ← (gauche)"}, {id:"press", name:"Molette (appui)"}, {id:"cw", name:"Molette → (droite)"},
+];
+// event.code du Mac → nom de touche de l'outil
+const CODEMAP = {Enter:"enter",Escape:"escape",Backspace:"backspace",Tab:"tab",Space:"space",Minus:"minus",Equal:"equal",
+  BracketLeft:"leftbracket",BracketRight:"rightbracket",Backslash:"backslash",Semicolon:"semicolon",Quote:"quote",
+  Backquote:"grave",Comma:"comma",Period:"dot",Slash:"slash",CapsLock:"capslock",Insert:"insert",Home:"home",
+  PageUp:"pageup",Delete:"delete",End:"end",PageDown:"pagedown",ArrowRight:"right",ArrowLeft:"left",ArrowDown:"down",
+  ArrowUp:"up",NumpadDivide:"numpadslash",NumpadMultiply:"numpadasterisk",NumpadSubtract:"numpadminus",
+  NumpadAdd:"numpadplus",NumpadEnter:"numpadenter",NumpadDecimal:"numpaddot",NumpadEqual:"numpadequal",IntlBackslash:"grave"};
+
+const ACTIONS = [["app","Ouvrir une application"],["claude_quick","Claude — saisie rapide (⌥⌥)"],["claude","Ouvrir Terminal + Claude Code"],["dictation","Dictée Claude Code (maintenir)"],["screen_up","Volume écran +"],["screen_down","Volume écran −"],["screen_mute","Volume écran muet"],["shell","Commande shell"]];
+let state, sel = "b0", apps = [];
+
+const $ = s => document.querySelector(s);
+const label = v => {
+  const m = [...MEDIA, ...MOUSE].find(x => x[0] === v.replace(/^(ctrl|shift|alt)-/, ""));
+  if (m) return (v.includes("-") && !MEDIA.find(x=>x[0]===v) ? v.split("-")[0] + " + " : "") + m[1];
+  return v.replace(/cmd-/g,"⌘").replace(/alt-/g,"⌥").replace(/shift-/g,"⇧").replace(/ctrl-/g,"⌃") || "—";
+};
+const getVal = id => id[0] === "b" ? state.layers[0].buttons[+id[1]] : state.layers[0].knob[id];
+const setVal = (id, v) => { if (id[0] === "b") state.layers[0].buttons[+id[1]] = v; else state.layers[0].knob[id] = v; renderPad(); };
+
+function kindOf(v) {
+  if (MEDIA.some(m => m[0] === v)) return "media";
+  const base = v.replace(/^(ctrl|shift|alt)-/, "");
+  if (base.split("+").every(p => MOUSE.some(m => m[0] === p))) return "mouse";
+  return "keys";
+}
+function parseChords(v) {
+  return v.split(",").filter(Boolean).map(c => {
+    const parts = c.split("-"), mods = [], key = [];
+    for (const p of parts) (MODS.some(m => m[0] === p) || ["win","opt"].includes(p) ? mods : key).push(p === "win" ? "cmd" : p === "opt" ? "alt" : p);
+    return {mods, key: key.join("-")};
+  });
+}
+const joinChords = cs => cs.map(c => [...c.mods, c.key].filter(Boolean).join("-")).filter(Boolean).join(",");
+
+function renderPad() {
+  const t = id => actionLabel(id) || label(getVal(id));
+  const cls = id => sel === id ? "sel" : "";
+  $("#pad").innerHTML = `
+    <div class="knobwrap">
+      <button class="arrow ${cls("ccw")}" data-s="ccw" title="Molette vers la gauche">◀</button>
+      <button class="knob ${cls("press")}" data-s="press" title="Appui sur la molette"></button>
+      <button class="arrow ${cls("cw")}" data-s="cw" title="Molette vers la droite">▶</button>
+    </div>
+    <div class="caps">${[0,1,2].map(i => `
+      <button class="cap ${cls("b" + i)}" data-s="b${i}">
+        <span class="num">TOUCHE ${i+1}</span><span class="txt">${t("b" + i)}</span>
+      </button>`).join("")}</div>`;
+  $("#pad").querySelectorAll("[data-s]").forEach(b => b.onclick = () => {
+    sel = b.dataset.s; renderPad(); renderEditor();
+  });
+  const knobTitle = ["◀ " + t("ccw"), "● " + t("press"), "▶ " + t("cw")].join("   ");
+  $("#pad").querySelector(".knobwrap").title = knobTitle;
+  paintGlow();
+}
+
+// La lueur sous le boîtier reprend l'état de l'éclairage
+function paintGlow() {
+  const rgb = state.led === 0 ? "0,0,0" : state.led === 2 ? "120,90,220" : "190,80,220";
+  document.documentElement.style.setProperty("--glow", rgb);
+}
+
+function actionLabel(id) {
+  const a = state.actions[id];
+  if (!a) return "";
+  return {app: "▶ " + (a.value || "Claude"), claude: "▶ Claude Code", claude_quick: "✦ Claude", dictation: "🎙 Dictée", screen_up: "🖥 Vol +", screen_down: "🖥 Vol −", screen_mute: "🖥 Muet", shell: "$ " + a.value}[a.type];
+}
+
+function renderEditor() {
+  const v = getVal(sel), kind = state.actions[sel] ? "action" : kindOf(v);
+  $("#edtitle").textContent = SLOTS.find(s => s.id === sel).name;
+  $("#kinds").querySelectorAll("button").forEach(b => {
+    b.classList.toggle("on", b.dataset.k === kind);
+    b.onclick = () => {
+      if (b.dataset.k === kind) return;
+      if (b.dataset.k === "action") { state.actions[sel] = {type: "app", value: "Claude"}; renderPad(); }
+      else { delete state.actions[sel]; setVal(sel, {keys:"a", media:"play", mouse:"click"}[b.dataset.k]); }
+      renderEditor();
+    };
+  });
+  const ed = $("#editor");
+  if (kind === "action") {
+    const a = state.actions[sel];
+    ed.innerHTML = `<select id="atype">${ACTIONS.map(x => `<option value="${x[0]}" ${x[0]===a.type?"selected":""}>${x[1]}</option>`).join("")}</select>
+      ${a.type === "app" ? `<input type="text" id="aval" list="applist" value="${(a.value||"").replace(/"/g,"&quot;")}" placeholder="Nom de l'application">
+        <datalist id="applist">${apps.map(n => `<option value="${n}">`).join("")}</datalist>` : ""}
+      ${a.type === "shell" ? `<input type="text" id="aval" value="${(a.value||"").replace(/"/g,"&quot;")}" placeholder="ex. open ~/Downloads" style="width:100%;margin-top:8px">` : ""}
+      <p class="hint">${{
+        app: "Ouvre l'application, ou la met au premier plan si elle est déjà ouverte.",
+        claude_quick: "Simule un double appui sur Option : ouvre la barre de saisie rapide de l'appli Claude.",
+        claude: "Ouvre une nouvelle fenêtre Terminal et y lance <code>claude</code>.",
+        dictation: "Appui court : met Terminal au premier plan. Maintenu : dicte dans Claude Code tant que la touche est enfoncée (il faut <code>/voice hold</code> activé dans Claude Code).",
+        screen_up: "Monte le volume de l'écran externe en DDC (son en DisplayPort/HDMI, que macOS ne sait pas régler).",
+        screen_down: "Baisse le volume de l'écran externe en DDC.",
+        screen_mute: "Coupe ou remet le son de l'écran externe.",
+        shell: "Commande lancée par Karabiner, sans fenêtre."}[a.type]}</p>
+      <p class="hint">Les actions Mac passent par Karabiner-Elements : le macropad envoie F13 à F18, et Karabiner fait l'action.</p>`;
+    $("#atype").onchange = e => { state.actions[sel] = {type: e.target.value, value: e.target.value === "app" ? "Claude" : ""}; renderPad(); renderEditor(); };
+    const av = $("#aval"); if (av) av.oninput = e => { state.actions[sel].value = e.target.value; renderPad(); };
+  } else if (kind === "media") {
+    ed.innerHTML = `<select id="media">${MEDIA.map(m => `<option value="${m[0]}" ${m[0]===v?"selected":""}>${m[1]}</option>`).join("")}</select>`;
+    $("#media").onchange = e => setVal(sel, e.target.value);
+  } else if (kind === "mouse") {
+    const mod = (v.match(/^(ctrl|shift|alt)-/) || [,""])[1], act = v.replace(/^(ctrl|shift|alt)-/, "");
+    ed.innerHTML = `<div class="row" style="margin-top:0">
+        <select id="mact">${MOUSE.map(m => `<option value="${m[0]}" ${m[0]===act?"selected":""}>${m[1]}</option>`).join("")}</select>
+        <select id="mmod"><option value="">sans modificateur</option>${["ctrl","shift","alt"].map(m => `<option ${m===mod?"selected":""}>${m}</option>`).join("")}</select></div>`;
+    const upd = () => setVal(sel, ($("#mmod").value ? $("#mmod").value + "-" : "") + $("#mact").value);
+    $("#mact").onchange = upd; $("#mmod").onchange = upd;
+  } else {
+    const chords = parseChords(v);
+    if (!chords.length) chords.push({mods: [], key: "a"});
+    ed.innerHTML = chords.map((c, i) => `<div class="chord" data-i="${i}">
+        <b>${i+1}.</b>
+        <span class="mods">${MODS.map(m => `<label><input type="checkbox" value="${m[0]}" ${c.mods.includes(m[0])?"checked":""}>${m[1]}</label>`).join("")}</span>
+        <select class="k"><option value="">(aucune)</option>${KEYS.map(x => `<option ${x===c.key?"selected":""}>${x}</option>`).join("")}</select>
+        <button class="btn capture">⌨︎ Capturer</button>
+        ${chords.length > 1 ? `<button class="btn del">✕</button>` : ""}
+      </div>`).join("") +
+      `<div class="row">${chords.length < 5 ? `<button class="btn" id="add">+ Ajouter une frappe</button>` : ""}
+       <span class="hint">Jusqu'à 5 frappes enchaînées (ex. ⌘C puis ⌘V).</span></div>`;
+    const read = () => [...ed.querySelectorAll(".chord")].map(r => ({
+      mods: [...r.querySelectorAll("input:checked")].map(x => x.value), key: r.querySelector(".k").value }));
+    const commit = cs => { setVal(sel, joinChords(cs) || "a"); renderEditor(); };
+    ed.querySelectorAll("input, select").forEach(x => x.onchange = () => commit(read()));
+    ed.querySelectorAll(".del").forEach(b => b.onclick = () => { const cs = read(); cs.splice(+b.closest(".chord").dataset.i, 1); commit(cs); });
+    const add = $("#add"); if (add) add.onclick = () => commit([...read(), {mods: [], key: "a"}]);
+    ed.querySelectorAll(".capture").forEach(b => b.onclick = () => {
+      b.classList.add("on"); b.textContent = "Appuie sur une touche…";
+      const onKey = e => {
+        if (["Meta","Control","Shift","Alt"].includes(e.key)) return;
+        e.preventDefault(); window.removeEventListener("keydown", onKey, true);
+        let key = CODEMAP[e.code];
+        if (!key && /^Key[A-Z]$/.test(e.code)) key = e.code.slice(3).toLowerCase();
+        if (!key && /^Digit\d$/.test(e.code)) key = e.code.slice(5);
+        if (!key && /^F\d+$/.test(e.code)) key = e.code.toLowerCase();
+        if (!key && /^Numpad\d$/.test(e.code)) key = "numpad" + e.code.slice(6);
+        const cs = read(), i = +b.closest(".chord").dataset.i;
+        cs[i] = {mods: MODS.map(m => m[0]).filter(m => ({ctrl:e.ctrlKey, shift:e.shiftKey, alt:e.altKey, cmd:e.metaKey})[m]), key: key || ""};
+        commit(cs);
+      };
+      window.addEventListener("keydown", onKey, true);
+    });
+  }
+}
+
+function renderLeds() {
+  $("#leds").innerHTML = LED_MODES.map(([n, name]) => `<button class="btn ${state.led===n?"on":""}" data-n="${n}">${name}</button>`).join("") + `<button class="btn" id="shuffle">🎲 Autre couleur</button>`;
+  $("#shuffle").onclick = async () => { const b = $("#shuffle"); b.disabled = true; const r = await post("/api/ledshuffle", {}); if (r.ok) { state.led = 1; renderLeds(); paintGlow(); } else b.disabled = false; };
+  $("#leds").querySelectorAll("button[data-n]").forEach(b => b.onclick = async () => {
+    const r = await post("/api/led", {mode: +b.dataset.n});
+    if (r.ok) { state.led = +b.dataset.n; renderLeds(); paintGlow(); }
+  });
+}
+
+function say(text, ok) { const m = $("#msg"); m.textContent = text; m.className = ok ? "ok" : "err"; }
+async function post(url, body) {
+  try {
+    const r = await (await fetch(url, {method: "POST", body: JSON.stringify(body)})).json();
+    say(r.msg, r.ok); return r;
+  } catch (e) { say("Serveur injoignable : relance l'appli.", false); return {ok: false}; }
+}
+
+$("#upload").onclick = async () => {
+  const b = $("#upload"); b.disabled = true; b.textContent = "Écriture…";
+  await post("/api/upload", state);
+  b.disabled = false; b.textContent = "Écrire dans le clavier";
+};
+
+async function pollDevice() {
+  try {
+    const {present} = await (await fetch("/api/device")).json();
+    $("#dot").classList.toggle("on", present);
+    $("#devtxt").textContent = present ? "branché" : "non détecté";
+  } catch { $("#devtxt").textContent = "serveur arrêté"; $("#dot").classList.remove("on"); }
+}
+
+(async () => {
+  state = await (await fetch("/api/state")).json();
+  state.actions = state.actions || {};
+  fetch("/api/apps").then(r => r.json()).then(a => { apps = a; });
+  renderPad(); renderEditor(); renderLeds(); pollDevice(); setInterval(pollDevice, 3000);
+})();
+</script>
+</body>
+</html>
