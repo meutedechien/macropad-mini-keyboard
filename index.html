@@ -51,11 +51,11 @@
            background: rgba(255,255,255,.07); color: #e9e9ea; font-size: 15px; }
   .arrow:hover { background: rgba(255,255,255,.16); }
   .arrow.sel { outline: 2px solid var(--accent); }
-  .knob { width: 74px; height: 74px; border-radius: 50%; border: 0; cursor: pointer; padding: 0;
-          background:
-            radial-gradient(circle at 50% 38%, #f2f2f0 0 26%, transparent 27%),
-            repeating-conic-gradient(#cfcec9 0 3deg, #97968f 3deg 6deg);
-          box-shadow: inset 0 -3px 6px rgba(0,0,0,.45), 0 3px 6px rgba(0,0,0,.5); }
+  .knob { width: 68px; height: 68px; border-radius: 50%; border: 0; cursor: pointer; padding: 0;
+          position: relative; background: linear-gradient(165deg, #d7d6d2, #a3a29d);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 3px 6px rgba(0,0,0,.45); }
+  .knob::after { content: ""; position: absolute; left: 50%; top: 11px; width: 4px; height: 13px;
+                 margin-left: -2px; border-radius: 2px; background: #5d5c58; }
   .knob.sel { outline: 3px solid var(--accent); outline-offset: 2px; }
   .caps { display: flex; gap: 12px; }
   .cap { width: 88px; height: 88px; border: 0; border-radius: 9px; cursor: pointer; padding: 6px;
@@ -92,6 +92,8 @@
   .leds .btn.on { outline: 2px solid var(--accent); }
   #msg { min-height: 1.4em; font-size: 14px; }
   #msg.ok { color: var(--ok); } #msg.err { color: var(--err); }
+  .sign { text-align: center; color: var(--mute); font-size: 13px; margin: 0; }
+  .sign a { color: inherit; }
 </style>
 </head>
 <body>
@@ -129,6 +131,8 @@
     </div>
     <div id="msg"></div>
   </section>
+  <p class="sign">Made by Emilien Colin 🇨🇭 ·
+    <a href="https://github.com/meutedechien/macropad-mini-keyboard">code source</a></p>
 </div>
 
 <script>
@@ -149,7 +153,7 @@ const CODEMAP = {Enter:"enter",Escape:"escape",Backspace:"backspace",Tab:"tab",S
   ArrowUp:"up",NumpadDivide:"numpadslash",NumpadMultiply:"numpadasterisk",NumpadSubtract:"numpadminus",
   NumpadAdd:"numpadplus",NumpadEnter:"numpadenter",NumpadDecimal:"numpaddot",NumpadEqual:"numpadequal",IntlBackslash:"grave"};
 
-const ACTIONS = [["app","Ouvrir une application"],["claude_quick","Claude — saisie rapide (⌥⌥)"],["claude","Ouvrir Terminal + Claude Code"],["dictation","Dictée Claude Code (maintenir)"],["screen_up","Volume écran +"],["screen_down","Volume écran −"],["screen_mute","Volume écran muet"],["shell","Commande shell"]];
+const ACTIONS = [["app","Ouvrir une application"],["claude_quick","Claude — saisie rapide (⌥⌥)"],["claude","Ouvrir Terminal + Claude Code"],["dictation","Dictée Claude Code (maintenir)"],["shell","Commande shell"]];
 let state, sel = "b0", apps = [];
 
 const $ = s => document.querySelector(s);
@@ -180,15 +184,15 @@ function renderPad() {
   const t = id => actionLabel(id) || label(getVal(id));
   const cls = id => sel === id ? "sel" : "";
   $("#pad").innerHTML = `
+    <div class="caps">${[2,1,0].map(i => `
+      <button class="cap ${cls("b" + i)}" data-s="b${i}">
+        <span class="num">TOUCHE ${i+1}</span><span class="txt">${t("b" + i)}</span>
+      </button>`).join("")}</div>
     <div class="knobwrap">
       <button class="arrow ${cls("ccw")}" data-s="ccw" title="Molette vers la gauche">◀</button>
       <button class="knob ${cls("press")}" data-s="press" title="Appui sur la molette"></button>
       <button class="arrow ${cls("cw")}" data-s="cw" title="Molette vers la droite">▶</button>
-    </div>
-    <div class="caps">${[0,1,2].map(i => `
-      <button class="cap ${cls("b" + i)}" data-s="b${i}">
-        <span class="num">TOUCHE ${i+1}</span><span class="txt">${t("b" + i)}</span>
-      </button>`).join("")}</div>`;
+    </div>`;
   $("#pad").querySelectorAll("[data-s]").forEach(b => b.onclick = () => {
     sel = b.dataset.s; renderPad(); renderEditor();
   });
@@ -206,7 +210,7 @@ function paintGlow() {
 function actionLabel(id) {
   const a = state.actions[id];
   if (!a) return "";
-  return {app: "▶ " + (a.value || "Claude"), claude: "▶ Claude Code", claude_quick: "✦ Claude", dictation: "🎙 Dictée", screen_up: "🖥 Vol +", screen_down: "🖥 Vol −", screen_mute: "🖥 Muet", shell: "$ " + a.value}[a.type];
+  return {app: "▶ " + (a.value || "Claude"), claude: "▶ Claude Code", claude_quick: "✦ Claude", dictation: "🎙 Dictée", shell: "$ " + a.value}[a.type];
 }
 
 function renderEditor() {
@@ -233,9 +237,6 @@ function renderEditor() {
         claude_quick: "Simule un double appui sur Option : ouvre la barre de saisie rapide de l'appli Claude.",
         claude: "Ouvre une nouvelle fenêtre Terminal et y lance <code>claude</code>.",
         dictation: "Appui court : met Terminal au premier plan. Maintenu : dicte dans Claude Code tant que la touche est enfoncée (il faut <code>/voice hold</code> activé dans Claude Code).",
-        screen_up: "Monte le volume de l'écran externe en DDC (son en DisplayPort/HDMI, que macOS ne sait pas régler).",
-        screen_down: "Baisse le volume de l'écran externe en DDC.",
-        screen_mute: "Coupe ou remet le son de l'écran externe.",
         shell: "Commande lancée par Karabiner, sans fenêtre."}[a.type]}</p>
       <p class="hint">Les actions Mac passent par Karabiner-Elements : le macropad envoie F13 à F18, et Karabiner fait l'action.</p>`;
     $("#atype").onchange = e => { state.actions[sel] = {type: e.target.value, value: e.target.value === "app" ? "Claude" : ""}; renderPad(); renderEditor(); };

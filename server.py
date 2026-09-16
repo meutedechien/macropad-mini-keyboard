@@ -90,9 +90,6 @@ def action_manipulator(slot, action):
         m["to"] = [{"shell_command": "open -a Terminal"}]
         m["to_if_held_down"] = [{"key_code": "spacebar"}]
         m["parameters"] = {"basic.to_if_held_down_threshold_milliseconds": 200}
-    elif t in ("screen_up", "screen_down", "screen_mute"):
-        script = shlex.quote(os.path.join(HERE, "ecran_volume.sh"))
-        m["to"] = [{"shell_command": f"{script} {t[7:]}"}]
     elif t == "shell":
         m["to"] = [{"shell_command": value}]
     else:

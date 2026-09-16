@@ -11,7 +11,7 @@ CH57x) from macOS. Interface is in French; English notes below.*
 - Assigner à chaque touche et à chaque sens de la molette : une frappe clavier (jusqu'à 5 frappes
   enchaînées avec Ctrl / Maj / Option / Cmd), une touche multimédia, un clic ou une molette de souris.
 - **Actions Mac** : ouvrir une application, ouvrir Terminal et y lancer une commande, lancer une
-  commande shell, ou dicter à la voix tant que la touche est maintenue. Ces actions passent par
+  commande shell quelconque, ou dicter à la voix tant que la touche est maintenue. Ces actions passent par
   [Karabiner-Elements](https://karabiner-elements.pqrs.org/) : la touche envoie F13…F18, et une règle
   limitée à ce clavier fait le reste.
 - Choisir le mode d'éclairage, avec un bouton « couleur au hasard » (voir plus bas).
@@ -54,7 +54,6 @@ Aucune dépendance Python : tout tient dans la bibliothèque standard.
 | `Macropad.command` | Lanceur à double-cliquer |
 | `led_raw.py` | Envoi de paquets USB bruts, utilisé pour explorer le protocole des LED (pyusb) |
 | `snap/snap.swift` | Petit outil de capture webcam, utilisé pour observer les LED pendant les tests |
-| `ecran_volume.sh` | Bonus : volume d'un écran externe en DDC, via `m1ddc` |
 
 ## English summary
 
