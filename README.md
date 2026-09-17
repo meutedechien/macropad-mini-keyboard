@@ -49,6 +49,10 @@ Le firmware d'origine ne sait pas passer en mode flash tout seul : il faut le fo
 2. **Souder une résistance de 10 kΩ entre la broche 10 (D+, P3.6) et la broche 12 (VCC, 5 V).** La
    broche 11 (masse) est entre les deux : la résistance doit l'enjamber sans la toucher. Ne jamais
    relier ces broches par un fil direct.
+
+   ![Résistance de 10 kΩ entre la broche 10 (D+) et la broche 12 (5 V) de la CH552G](docs/bootloader-ch552g.jpg)
+
+   *Le rond jaune repère la broche 1. En vert, la broche 10 (D+) ; en rose, la broche 12 (5 V).*
 3. Brancher le clavier. Il apparaît alors comme bootloader USB `4348:55e0` : l'appli affiche
    « mode flash ».
 4. Dans l'appli, cliquer **Mettre à jour le firmware**.
