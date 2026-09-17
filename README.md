@@ -67,8 +67,8 @@ firmware d'origine est perdu définitivement. Tout est expliqué sur la branche
 
 This configures the generic AliExpress 3-key + knob macropad on macOS. It wraps
 [`ch57x-keyboard-tool`](https://github.com/kriomant/ch57x-keyboard-tool) with a local web UI, and
-writes Karabiner-Elements rules so keys can also launch apps, run shell commands, or act as a
-push-to-talk dictation key. Findings about this firmware: LED colors cannot be set (only three
+writes Karabiner-Elements rules so keys can also launch apps or run commands in Terminal or in
+the background. Findings about this firmware: LED colors cannot be set (only three
 built-in modes), only one LED lights at a time, and the USB-C port frequently lacks its CC pull-down
 resistors, so it needs a USB-A → USB-C cable.
 
