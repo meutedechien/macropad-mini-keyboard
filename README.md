@@ -10,10 +10,6 @@ CH57x) from macOS. Interface is in French; English notes below.*
 
 - Assigner à chaque touche et à chaque sens de la molette : une frappe clavier (jusqu'à 5 frappes
   enchaînées avec Ctrl / Maj / Option / Cmd), une touche multimédia, un clic ou une molette de souris.
-- **Actions Mac** : ouvrir une application, lancer une commande dans Terminal, ou lancer une
-  commande en arrière-plan. Ces actions passent par
-  [Karabiner-Elements](https://karabiner-elements.pqrs.org/) : la touche envoie F13…F18, et une règle
-  limitée à ce clavier fait le reste.
 - Choisir le mode d'éclairage, avec un bouton « couleur au hasard » (voir plus bas).
 - Tout est écrit dans la mémoire du clavier : il garde ses touches sur n'importe quel ordinateur.
 
@@ -27,16 +23,16 @@ cd ~/macropad && python3 server.py
 
 La page s'ouvre sur <http://localhost:8766>. Ensuite, un double-clic sur `Macropad.command` suffit.
 
-Pour les actions Mac uniquement : installer Karabiner-Elements
-(`brew install --cask karabiner-elements`) et activer ses services en arrière-plan.
-
 Aucune dépendance Python : tout tient dans la bibliothèque standard.
+
+Pour aller plus loin, comme ouvrir une application d'une touche, on peut ajouter
+[Karabiner-Elements](https://karabiner-elements.pqrs.org/) : l'onglet « Action Mac » de l'appli s'en sert.
 
 ## Aller plus loin : couleurs RVB et réglage en direct (bricoleurs)
 
 La puce du clavier (WCH CH552G) peut recevoir un autre firmware. Il donne une couleur RVB au choix et
 un effet par touche (fixe, respiration, clignotement, arc-en-ciel…), le réglage en direct depuis
-l'appli, et les actions Mac sans Karabiner. Il faut ouvrir le boîtier et souder une résistance, et le
+l'appli, et des touches qui ouvrent une application. Il faut ouvrir le boîtier et souder une résistance, et le
 firmware d'origine est perdu définitivement. Tout est expliqué sur la branche
 [`firmware-rgb`](https://github.com/meutedechien/macropad-mini-keyboard/tree/firmware-rgb).
 
@@ -57,7 +53,7 @@ firmware d'origine est perdu définitivement. Tout est expliqué sur la branche
 
 | Fichier | Rôle |
 | --- | --- |
-| `server.py` | Serveur local : écrit la config avec `ch57x-keyboard-tool` et génère les règles Karabiner |
+| `server.py` | Serveur local : écrit la config dans le clavier avec `ch57x-keyboard-tool` |
 | `index.html` | L'interface |
 | `Macropad.command` | Lanceur à double-cliquer |
 | `led_raw.py` | Envoi de paquets USB bruts, utilisé pour explorer le protocole des LED (pyusb) |
@@ -67,8 +63,7 @@ firmware d'origine est perdu définitivement. Tout est expliqué sur la branche
 
 This configures the generic AliExpress 3-key + knob macropad on macOS. It wraps
 [`ch57x-keyboard-tool`](https://github.com/kriomant/ch57x-keyboard-tool) with a local web UI, and
-writes Karabiner-Elements rules so keys can also launch apps or run commands in Terminal or in
-the background. Findings about this firmware: LED colors cannot be set (only three
+can optionally use Karabiner-Elements for keys that launch apps or run commands. Findings about this firmware: LED colors cannot be set (only three
 built-in modes), only one LED lights at a time, and the USB-C port frequently lacks its CC pull-down
 resistors, so it needs a USB-A → USB-C cable.
 
