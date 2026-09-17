@@ -68,6 +68,8 @@
   .cap .txt { font-size: 12.5px; font-weight: 600; text-align: center; line-height: 1.25;
               overflow-wrap: anywhere; }
   .cap.sel { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .cap .led { width: 22px; height: 5px; border-radius: 3px; margin-top: 4px;
+              background: var(--c, #555); }
 
   /* Éditeur */
   .cols { display: grid; grid-template-columns: 1fr; gap: 20px; }
@@ -88,8 +90,15 @@
   .hint { color: var(--mute); font-size: 13px; }
   .hint code { background: rgba(125,125,135,.16); padding: 1px 5px; border-radius: 5px; }
   .capture.on { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .leds { display: flex; gap: 8px; flex-wrap: wrap; }
-  .leds .btn.on { outline: 2px solid var(--accent); }
+  .ledblock { padding: 10px 0; border-bottom: 1px dashed var(--line); }
+  .ledblock b { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .ledblock .btn { padding: 3px 9px; font-size: 13px; font-weight: 400; }
+  .ledblock .btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .ledrow { display: flex; align-items: center; gap: 8px; padding: 3px 0; flex-wrap: wrap; }
+  .ledrow span { width: 82px; color: var(--mute); font-size: 13px; }
+  input[type=color] { width: 44px; height: 32px; border: 1px solid var(--line); border-radius: 8px;
+                      padding: 2px; background: var(--card); cursor: pointer; }
+  input[type=range] { flex: 1; accent-color: var(--accent); }
   #msg { min-height: 1.4em; font-size: 14px; }
   #msg.ok { color: var(--ok); } #msg.err { color: var(--err); }
   .sign { text-align: center; color: var(--mute); font-size: 13px; margin: 0; }
@@ -111,7 +120,6 @@
       <div class="tabs" id="kinds">
         <button data-k="keys">Clavier</button>
         <button data-k="media">Multimédia</button>
-        <button data-k="mouse">Souris</button>
         <button data-k="action">Action Mac</button>
       </div>
       <div id="editor"></div>
@@ -119,16 +127,21 @@
 
     <section class="card">
       <h2>Éclairage</h2>
-      <div class="leds" id="leds"></div>
-      <p class="hint">Pas de couleur au choix sur ce modèle. « 🎲 Autre couleur » en fige une au hasard (rouge, jaune, vert, cyan, bleu, violet) : reclique jusqu'à celle qui te plaît. Tu peux aussi lancer le défilement et figer au bon moment.</p>
+      <div id="leds"></div>
+      <div class="row"><span class="hint" style="width:70px">Luminosité</span>
+        <input type="range" id="bright" min="10" max="255"></div>
+      <div class="row"><span class="hint" style="width:70px">Vitesse</span>
+        <input type="range" id="speed" min="1" max="10"></div>
     </section>
   </div>
 
   <section class="card">
     <div class="row" style="margin-top:0">
-      <button class="btn primary" id="upload">Écrire dans le clavier</button>
+      <button class="btn primary" id="save">Enregistrer sur le clavier</button>
+      <button class="btn" id="upload">Mettre à jour le firmware</button>
       <input type="text" id="test" placeholder="Zone de test : appuie sur les touches ici" style="flex:1;min-width:200px">
     </div>
+    <p class="hint" id="flashhint"></p>
     <div id="msg"></div>
   </section>
   <p class="sign">Made by Emilien Colin 🇨🇭 ·
@@ -139,8 +152,28 @@
 const MODS = [["ctrl","Ctrl"],["shift","Maj"],["alt","Option"],["cmd","Cmd"]];
 const KEYS = "a b c d e f g h i j k l m n o p q r s t u v w x y z 1 2 3 4 5 6 7 8 9 0 enter escape backspace tab space minus equal leftbracket rightbracket backslash semicolon quote grave comma dot slash capslock f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13 f14 f15 f16 f17 f18 f19 f20 f21 f22 f23 f24 printscreen scrolllock pause insert home pageup delete end pagedown right left down up numlock numpadslash numpadasterisk numpadminus numpadplus numpadenter numpad1 numpad2 numpad3 numpad4 numpad5 numpad6 numpad7 numpad8 numpad9 numpad0 numpaddot numpadequal application power".split(" ");
 const MEDIA = [["play","Lecture/Pause"],["next","Suivant"],["prev","Précédent"],["stop","Stop"],["mute","Muet"],["volumeup","Volume +"],["volumedown","Volume −"],["screenlock","Verrouiller"],["calculator","Calculatrice"],["favorites","Favoris"]];
-const MOUSE = [["click","Clic gauche"],["rclick","Clic droit"],["mclick","Clic milieu"],["wheelup","Molette ↑"],["wheeldown","Molette ↓"]];
-const LED_MODES = [[0,"Éteint"],[2,"🌈 Défilement couleurs"],[1,"⏸ Figer cette couleur (respiration)"]];
+const MOUSE = [];
+const EFFECTS = [["eteinte","Éteinte"],["fixe","Fixe"],["respiration","Respire"],["clignote","Clignote"],["arc-en-ciel","Arc-en-ciel"]];
+const EFFECTS_PRESS = [["comme_repos","Comme au repos"], ...EFFECTS, ["flash","Flash puis fondu"]];
+const DEFAULT_LEDS = [
+  {repos: {effet: "fixe", couleur: "#ff2000"}, appui: {effet: "comme_repos", couleur: "#ff2000"}},
+  {repos: {effet: "fixe", couleur: "#0040ff"}, appui: {effet: "comme_repos", couleur: "#0040ff"}},
+  {repos: {effet: "fixe", couleur: "#00c83c"}, appui: {effet: "clignote", couleur: "#00c83c"}}];
+let pendingSend = false;
+let previewMask = 0, liveTimer = null, devState = "absent";
+
+// Applique les réglages au clavier sans rien enregistrer (regroupe les changements rapides)
+function scheduleLive() {
+  if (devState !== "direct") return;
+  clearTimeout(liveTimer);
+  liveTimer = setTimeout(async () => {
+    try {
+      const r = await (await fetch("/api/live", {method: "POST",
+        body: JSON.stringify({state, preview: previewMask})})).json();
+      if (!r.ok) say(r.msg, false);
+    } catch { say("Serveur injoignable : relance l'appli.", false); }
+  }, 80);
+}
 const SLOTS = [
   {id:"b0", name:"Touche 1"}, {id:"b1", name:"Touche 2"}, {id:"b2", name:"Touche 3"},
   {id:"ccw", name:"Molette ← (gauche)"}, {id:"press", name:"Molette (appui)"}, {id:"cw", name:"Molette → (droite)"},
@@ -163,7 +196,7 @@ const label = v => {
   return v.replace(/cmd-/g,"⌘").replace(/alt-/g,"⌥").replace(/shift-/g,"⇧").replace(/ctrl-/g,"⌃") || "—";
 };
 const getVal = id => id[0] === "b" ? state.layers[0].buttons[+id[1]] : state.layers[0].knob[id];
-const setVal = (id, v) => { if (id[0] === "b") state.layers[0].buttons[+id[1]] = v; else state.layers[0].knob[id] = v; renderPad(); };
+const setVal = (id, v) => { if (id[0] === "b") state.layers[0].buttons[+id[1]] = v; else state.layers[0].knob[id] = v; renderPad(); scheduleLive(); };
 
 function kindOf(v) {
   if (MEDIA.some(m => m[0] === v)) return "media";
@@ -184,9 +217,10 @@ function renderPad() {
   const t = id => actionLabel(id) || label(getVal(id));
   const cls = id => sel === id ? "sel" : "";
   $("#pad").innerHTML = `
-    <div class="caps">${[2,1,0].map(i => `
+    <div class="caps">${[0,1,2].map(i => `
       <button class="cap ${cls("b" + i)}" data-s="b${i}">
         <span class="num">TOUCHE ${i+1}</span><span class="txt">${t("b" + i)}</span>
+        <span class="led" style="--c:${ledPreview(state.leds[i].repos)}"></span>
       </button>`).join("")}</div>
     <div class="knobwrap">
       <button class="arrow ${cls("ccw")}" data-s="ccw" title="Molette vers la gauche">◀</button>
@@ -201,10 +235,15 @@ function renderPad() {
   paintGlow();
 }
 
-// La lueur sous le boîtier reprend l'état de l'éclairage
+const ledPreview = st => st.effet === "eteinte" ? "#555"
+  : st.effet === "arc-en-ciel" ? "linear-gradient(90deg,#f00,#0f0,#00f)" : st.couleur;
+
+// La lueur sous le boîtier mélange les couleurs des LED allumées au repos
 function paintGlow() {
-  const rgb = state.led === 0 ? "0,0,0" : state.led === 2 ? "120,90,220" : "190,80,220";
-  document.documentElement.style.setProperty("--glow", rgb);
+  const on = state.leds.map(l => l.repos).filter(r => r.effet !== "eteinte" && r.effet !== "arc-en-ciel");
+  const rgb = [0, 0, 0];
+  on.forEach(r => [1, 3, 5].forEach((p, k) => rgb[k] += parseInt(r.couleur.slice(p, p + 2), 16) / on.length));
+  document.documentElement.style.setProperty("--glow", rgb.map(Math.round).join(","));
 }
 
 function actionLabel(id) {
@@ -220,8 +259,8 @@ function renderEditor() {
     b.classList.toggle("on", b.dataset.k === kind);
     b.onclick = () => {
       if (b.dataset.k === kind) return;
-      if (b.dataset.k === "action") { state.actions[sel] = {type: "app", value: ""}; renderPad(); }
-      else { delete state.actions[sel]; setVal(sel, {keys:"a", media:"play", mouse:"click"}[b.dataset.k]); }
+      if (b.dataset.k === "action") { state.actions[sel] = {type: "app", value: ""}; renderPad(); scheduleLive(); }
+      else { delete state.actions[sel]; setVal(sel, {keys:"a", media:"play"}[b.dataset.k]); }
       renderEditor();
     };
   });
@@ -235,9 +274,9 @@ function renderEditor() {
       <p class="hint">${{
         app: "Ouvre l'application, ou la met au premier plan si elle est déjà ouverte.",
         terminal: "Ouvre une nouvelle fenêtre Terminal et y lance la commande.",
-        shell: "Commande lancée par Karabiner, sans fenêtre."}[a.type]}</p>
-      <p class="hint">Les actions Mac passent par Karabiner-Elements : le macropad envoie F13 à F18, et Karabiner fait l'action.</p>`;
-    $("#atype").onchange = e => { state.actions[sel] = {type: e.target.value, value: ""}; renderPad(); renderEditor(); };
+        shell: "Commande lancée en arrière-plan, sans fenêtre."}[a.type]}</p>
+      <p class="hint">Faite par l'appli Macropad, qui doit tourner en arrière-plan sur ce Mac.</p>`;
+    $("#atype").onchange = e => { state.actions[sel] = {type: e.target.value, value: ""}; renderPad(); renderEditor(); scheduleLive(); };
     const av = $("#aval"); if (av) av.oninput = e => { state.actions[sel].value = e.target.value; renderPad(); };
   } else if (kind === "media") {
     ed.innerHTML = `<select id="media">${MEDIA.map(m => `<option value="${m[0]}" ${m[0]===v?"selected":""}>${m[1]}</option>`).join("")}</select>`;
@@ -252,21 +291,18 @@ function renderEditor() {
   } else {
     const chords = parseChords(v);
     if (!chords.length) chords.push({mods: [], key: "a"});
+    chords.length = 1;
     ed.innerHTML = chords.map((c, i) => `<div class="chord" data-i="${i}">
         <b>${i+1}.</b>
         <span class="mods">${MODS.map(m => `<label><input type="checkbox" value="${m[0]}" ${c.mods.includes(m[0])?"checked":""}>${m[1]}</label>`).join("")}</span>
         <select class="k"><option value="">(aucune)</option>${KEYS.map(x => `<option ${x===c.key?"selected":""}>${x}</option>`).join("")}</select>
         <button class="btn capture">⌨︎ Capturer</button>
-        ${chords.length > 1 ? `<button class="btn del">✕</button>` : ""}
       </div>`).join("") +
-      `<div class="row">${chords.length < 5 ? `<button class="btn" id="add">+ Ajouter une frappe</button>` : ""}
-       <span class="hint">Jusqu'à 5 frappes enchaînées (ex. ⌘C puis ⌘V).</span></div>`;
+      `<p class="hint">Une frappe par touche, avec ses modificateurs (ex. ⌘⇧C).</p>`;
     const read = () => [...ed.querySelectorAll(".chord")].map(r => ({
       mods: [...r.querySelectorAll("input:checked")].map(x => x.value), key: r.querySelector(".k").value }));
     const commit = cs => { setVal(sel, joinChords(cs) || "a"); renderEditor(); };
     ed.querySelectorAll("input, select").forEach(x => x.onchange = () => commit(read()));
-    ed.querySelectorAll(".del").forEach(b => b.onclick = () => { const cs = read(); cs.splice(+b.closest(".chord").dataset.i, 1); commit(cs); });
-    const add = $("#add"); if (add) add.onclick = () => commit([...read(), {mods: [], key: "a"}]);
     ed.querySelectorAll(".capture").forEach(b => b.onclick = () => {
       b.classList.add("on"); b.textContent = "Appuie sur une touche…";
       const onKey = e => {
@@ -287,12 +323,28 @@ function renderEditor() {
 }
 
 function renderLeds() {
-  $("#leds").innerHTML = LED_MODES.map(([n, name]) => `<button class="btn ${state.led===n?"on":""}" data-n="${n}">${name}</button>`).join("") + `<button class="btn" id="shuffle">🎲 Autre couleur</button>`;
-  $("#shuffle").onclick = async () => { const b = $("#shuffle"); b.disabled = true; const r = await post("/api/ledshuffle", {}); if (r.ok) { state.led = 1; renderLeds(); paintGlow(); } else b.disabled = false; };
-  $("#leds").querySelectorAll("button[data-n]").forEach(b => b.onclick = async () => {
-    const r = await post("/api/led", {mode: +b.dataset.n});
-    if (r.ok) { state.led = +b.dataset.n; renderLeds(); paintGlow(); }
+  const row = (i, key, label, list) => {
+    const st = state.leds[i][key];
+    const noColor = ["eteinte", "arc-en-ciel", "comme_repos"].includes(st.effet);
+    return `<div class="ledrow" data-i="${i}" data-k="${key}"><span>${label}</span>
+      <select>${list.map(m => `<option value="${m[0]}" ${m[0]===st.effet?"selected":""}>${m[1]}</option>`).join("")}</select>
+      <input type="color" value="${st.couleur}" ${noColor ? "hidden" : ""}></div>`;
+  };
+  $("#leds").innerHTML = state.leds.map((l, i) => `<div class="ledblock"><b>Touche ${i+1}
+      <button class="btn preview ${previewMask >> i & 1 ? "on" : ""}" data-i="${i}" title="Montre l'état « appui » sur le clavier">👁 Aperçu de l'appui</button></b>
+      ${row(i, "repos", "Au repos", EFFECTS)}${row(i, "appui", "Pendant l'appui", EFFECTS_PRESS)}</div>`).join("");
+  $("#leds").querySelectorAll(".ledrow").forEach(r => {
+    const st = state.leds[+r.dataset.i][r.dataset.k];
+    r.querySelector("select").onchange = e => { st.effet = e.target.value; renderLeds(); renderPad(); scheduleLive(); };
+    r.querySelector("input").oninput = e => { st.couleur = e.target.value; renderPad(); scheduleLive(); };
   });
+  $("#leds").querySelectorAll(".preview").forEach(b => b.onclick = () => {
+    previewMask ^= 1 << +b.dataset.i; renderLeds(); scheduleLive();
+  });
+  $("#bright").value = state.luminosite;
+  $("#bright").oninput = e => { state.luminosite = +e.target.value; scheduleLive(); };
+  $("#speed").value = state.vitesse;
+  $("#speed").oninput = e => { state.vitesse = +e.target.value; scheduleLive(); };
 }
 
 function say(text, ok) { const m = $("#msg"); m.textContent = text; m.className = ok ? "ok" : "err"; }
@@ -303,25 +355,47 @@ async function post(url, body) {
   } catch (e) { say("Serveur injoignable : relance l'appli.", false); return {ok: false}; }
 }
 
+$("#save").onclick = async () => {
+  const b = $("#save"); b.disabled = true; b.textContent = "Enregistrement…";
+  previewMask = 0; renderLeds();
+  await post("/api/save", state);
+  b.disabled = false; b.textContent = "Enregistrer sur le clavier";
+};
+
 $("#upload").onclick = async () => {
-  const b = $("#upload"); b.disabled = true; b.textContent = "Écriture…";
-  await post("/api/upload", state);
-  b.disabled = false; b.textContent = "Écrire dans le clavier";
+  const b = $("#upload"); b.disabled = true; b.textContent = "Mise à jour…";
+  const r = await post("/api/upload", state);
+  pendingSend = !!r.waiting;
+  b.disabled = false; b.textContent = pendingSend ? "En attente du clavier…" : "Mettre à jour le firmware";
 };
 
 async function pollDevice() {
   try {
-    const {present} = await (await fetch("/api/device")).json();
-    $("#dot").classList.toggle("on", present);
-    $("#devtxt").textContent = present ? "branché" : "non détecté";
+    const {state: dev} = await (await fetch("/api/device")).json();
+    const wasDirect = devState === "direct";
+    devState = dev;
+    $("#dot").classList.toggle("on", dev !== "absent");
+    $("#devtxt").textContent = {direct: "branché · réglage en direct", ancien: "branché · firmware à mettre à jour",
+      bootloader: "mode flash", absent: "non détecté"}[dev];
+    $("#save").disabled = dev !== "direct";
+    if (dev === "direct" && !wasDirect) scheduleLive();
+    if (dev === "bootloader" && pendingSend) { pendingSend = false; $("#upload").click(); }
+    $("#flashhint").textContent = {
+      direct: "Les changements s'appliquent tout de suite au clavier. « Enregistrer » les garde après débranchement.",
+      ancien: "Ce firmware ne sait pas encore régler en direct : clique « Mettre à jour le firmware » (une dernière fois par débranchement).",
+      bootloader: "Le clavier est en mode flash : clique « Mettre à jour le firmware ».",
+      absent: "Branche le clavier."}[dev];
   } catch { $("#devtxt").textContent = "serveur arrêté"; $("#dot").classList.remove("on"); }
 }
 
 (async () => {
   state = await (await fetch("/api/state")).json();
   state.actions = state.actions || {};
+  if (!state.leds || !state.leds[0].repos) state.leds = DEFAULT_LEDS;
+  state.luminosite = state.luminosite || 90;
+  state.vitesse = state.vitesse || 5;
   fetch("/api/apps").then(r => r.json()).then(a => { apps = a; });
-  renderPad(); renderEditor(); renderLeds(); pollDevice(); setInterval(pollDevice, 3000);
+  renderPad(); renderEditor(); renderLeds(); pollDevice(); setInterval(pollDevice, 1000);
 })();
 </script>
 </body>

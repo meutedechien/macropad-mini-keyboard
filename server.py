@@ -1,41 +1,55 @@
 #!/usr/bin/env python3
-"""Configurateur du macropad MINI KeyBoard (1189:8890) — serveur local.
+"""Configurateur du macropad 3 touches + molette (CH552G, firmware MacroPad RGB).
 
-Sert index.html et pilote ch57x-keyboard-tool :
-  GET  /api/state   config enregistrée
-  POST /api/upload  enregistre + écrit dans le clavier
-  POST /api/led     {"mode": n}
-  GET  /api/device  le clavier est-il branché ?
+Sert index.html et règle le clavier en direct par son canal HID constructeur :
+  GET  /api/state   réglages enregistrés
+  POST /api/live    applique les réglages tout de suite (+ aperçu de l'appui)
+  POST /api/save    enregistre dans le clavier et dans state.json
+  POST /api/upload  met à jour le firmware (passe le clavier en bootloader et flashe)
+  GET  /api/device  état du clavier : absent, ancien (firmware sans canal), direct, bootloader
   GET  /api/apps    applications installées (pour l'action « ouvrir une appli »)
 
-Actions Mac : le macropad envoie F13…F18 et Karabiner-Elements transforme ces
-touches (uniquement pour ce clavier) en commandes shell.
+À lancer avec venv/bin/python (hidapi et pyusb).
+
+Actions Mac : le clavier prévient l'appli par le canal constructeur, et l'appli
+ouvre l'application ou lance la commande. L'appli doit donc tourner en
+arrière-plan (install.sh l'ajoute à l'ouverture de session). Option : --no-browser.
 """
 import json
 import os
-import shlex
-import shutil
 import subprocess
+import sys
 import threading
+import time
 import webbrowser
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 PORT = 8766
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATE = os.path.join(HERE, "state.json")
-YAML = os.path.join(HERE, "config.yaml")
-TOOL = shutil.which("ch57x-keyboard-tool") or os.path.expanduser("~/.cargo/bin/ch57x-keyboard-tool")
+FIRMWARE_DIR = os.path.join(HERE, "firmware")
+VENV_PY = os.path.join(HERE, "venv", "bin", "python")
+sys.path.insert(0, FIRMWARE_DIR)
+import configure                            # noqa: E402  encodage du bloc de réglages
+import live                                 # noqa: E402  canal HID en direct
 LOCK = threading.Lock()
-KARABINER = os.path.expanduser("~/.config/karabiner/karabiner.json")
-RULE_PREFIX = "Macropad — "
 VID, PID = 0x1189, 0x8890
-# Touche envoyée par chaque emplacement quand il porte une action Mac
-FKEYS = {"b0": "f13", "b1": "f14", "b2": "f15", "ccw": "f16", "press": "f17", "cw": "f18"}
+# Ordre des entrées dans le firmware
+SLOTS = ["b0", "b1", "b2", "ccw", "press", "cw"]
+# Comment chaque action Mac est codée dans le firmware
+ACTION_CODES = {"app": "mac", "terminal": "mac", "shell": "mac"}
 
 DEFAULT = {
     "layers": [{"buttons": ["1", "2", "3"],
                 "knob": {"ccw": "volumedown", "press": "mute", "cw": "volumeup"}}],
-    "led": 0,
+    "leds": [{"repos": {"effet": "fixe", "couleur": "#ff2000"},
+              "appui": {"effet": "comme_repos", "couleur": "#ff2000"}},
+             {"repos": {"effet": "fixe", "couleur": "#0040ff"},
+              "appui": {"effet": "comme_repos", "couleur": "#0040ff"}},
+             {"repos": {"effet": "fixe", "couleur": "#00c83c"},
+              "appui": {"effet": "clignote", "couleur": "#00c83c"}}],
+    "luminosite": 90,
+    "vitesse": 5,
 }
 
 
@@ -47,84 +61,72 @@ def load_state():
         return DEFAULT
 
 
-def q(s):
-    return json.dumps(str(s))  # une chaîne JSON est une chaîne YAML valide
-
-
-def to_yaml(state):
+def firmware_config(state):
+    """Traduit l'état de l'appli en macropad.json pour firmware/configure.py."""
     actions = state.get("actions", {})
-    out = ["orientation: normal", "rows: 1", "columns: 3", "knobs: 1", "layers:"]
-    for layer in state["layers"]:
-        b = [FKEYS[f"b{i}"] if f"b{i}" in actions else x for i, x in enumerate(layer["buttons"])]
-        k = {s: FKEYS[s] if s in actions else v for s, v in layer["knob"].items()}
-        out += [
-            "  - buttons:",
-            f"      - [{', '.join(q(x) for x in b)}]",
-            "    knobs:",
-            f"      - ccw: {q(k['ccw'])}",
-            f"        press: {q(k['press'])}",
-            f"        cw: {q(k['cw'])}",
-        ]
-    return "\n".join(out) + "\n"
+    layer = state["layers"][0]
+    values = {"touche1": ("b0", layer["buttons"][0]), "touche2": ("b1", layer["buttons"][1]),
+              "touche3": ("b2", layer["buttons"][2]), "molette_gauche": ("ccw", layer["knob"]["ccw"]),
+              "molette_appui": ("press", layer["knob"]["press"]),
+              "molette_droite": ("cw", layer["knob"]["cw"])}
+    entrees = {}
+    for name, (slot, value) in values.items():
+        v = ACTION_CODES[actions[slot]["type"]] if slot in actions else value
+        if "," in v:
+            raise ValueError(f"{name} : une seule frappe par touche avec ce firmware")
+        if "click" in v or "wheel" in v:
+            raise ValueError(f"{name} : les actions souris ne sont pas gérées par ce firmware")
+        entrees[name] = v
+    return {"entrees": entrees, "leds": state.get("leds", DEFAULT["leds"]),
+            "luminosite": state.get("luminosite", 90), "vitesse": state.get("vitesse", 5)}
 
 
-def action_manipulator(slot, action):
+def run_action(slot):
+    """Exécute l'action Mac d'une entrée (appelé à l'appui)."""
+    action = load_state().get("actions", {}).get(slot)
+    if not action:
+        return
     t, value = action.get("type"), action.get("value", "")
-    m = {
-        "type": "basic",
-        "from": {"key_code": FKEYS[slot], "modifiers": {"optional": ["any"]}},
-        "conditions": [{"type": "device_if", "identifiers": [{"vendor_id": VID, "product_id": PID}]}],
-    }
     if t == "app" and value:
-        m["to"] = [{"shell_command": f"open -a {shlex.quote(value)}"}]
+        cmd = ["open", "-a", value]
     elif t == "terminal" and value:
         script = value.replace("\\", "\\\\").replace('"', '\\"')
-        m["to"] = [{"shell_command": "osascript -e 'tell application \"Terminal\"' -e 'activate' "
-                                     f"-e {shlex.quote('do script \"' + script + '\"')} -e 'end tell'"}]
+        cmd = ["osascript", "-e", 'tell application "Terminal"', "-e", "activate",
+               "-e", f'do script "{script}"', "-e", "end tell"]
     elif t == "shell" and value:
-        m["to"] = [{"shell_command": value}]
+        cmd = ["/bin/sh", "-c", value]
     else:
-        return None
-    return m
+        return
+    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def write_karabiner(state):
-    """Remplace les règles « Macropad — » du profil actif de Karabiner."""
-    try:
-        with open(KARABINER) as f:
-            cfg = json.load(f)
-    except OSError:
-        cfg = {"profiles": [{"name": "Default profile", "selected": True}]}
-    backup = KARABINER + ".avant-macropad"
-    if os.path.exists(KARABINER) and not os.path.exists(backup):
-        shutil.copy(KARABINER, backup)
-    profile = next((p for p in cfg["profiles"] if p.get("selected")), cfg["profiles"][0])
-    rules = profile.setdefault("complex_modifications", {}).setdefault("rules", [])
-    rules[:] = [r for r in rules if not r.get("description", "").startswith(RULE_PREFIX)]
-    names = {"b0": "touche 1", "b1": "touche 2", "b2": "touche 3",
-             "ccw": "molette gauche", "press": "molette appui", "cw": "molette droite"}
-    for slot, action in state.get("actions", {}).items():
-        m = action_manipulator(slot, action)
-        if m:
-            rules.append({"description": f"{RULE_PREFIX}{names[slot]}", "manipulators": [m]})
-    os.makedirs(os.path.dirname(KARABINER), exist_ok=True)
-    with open(KARABINER, "w") as f:
-        json.dump(cfg, f, indent=4, ensure_ascii=False)
+def on_event(index, pressed):
+    if pressed and index < len(SLOTS):
+        run_action(SLOTS[index])
 
 
-def karabiner_running():
-    return subprocess.run(["pgrep", "-qif", "console.user.server"]).returncode == 0
-
-
-def run(args, stdin=None):
+def flash(config):
+    """Écrit firmware/macropad.json puis lance configure.py --flash (clavier en bootloader)."""
+    with open(os.path.join(FIRMWARE_DIR, "macropad.json"), "w") as f:
+        json.dump(config, f, indent=2, ensure_ascii=False)
+    env = dict(os.environ, DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib")
     with LOCK:
-        p = subprocess.run([TOOL, *args], input=stdin, capture_output=True, text=True, timeout=30)
+        p = subprocess.run([VENV_PY, "configure.py", "--flash"], cwd=FIRMWARE_DIR, env=env,
+                           capture_output=True, text=True, timeout=60)
     return p.returncode == 0, (p.stdout + p.stderr).strip()
 
 
-def device_present():
-    p = subprocess.run(["hidutil", "list"], capture_output=True, text=True)
-    return "0x1189   0x8890" in p.stdout
+def device_state():
+    p = subprocess.run(["ioreg", "-p", "IOUSB", "-l", "-w0"], capture_output=True, text=True)
+    if '"idVendor" = 17224' in p.stdout:
+        return "bootloader"
+    if '"idVendor" = 4489' in p.stdout:
+        return "direct" if live.available() else "ancien"
+    return "absent"
+
+
+def block_for(state):
+    return configure.build(firmware_config(state))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -143,7 +145,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/state":
             return self.send_json(load_state())
         if self.path == "/api/device":
-            return self.send_json({"present": device_present()})
+            return self.send_json({"state": device_state()})
         if self.path == "/api/apps":
             apps = set()
             for d in ("/Applications", "/System/Applications", "/System/Applications/Utilities",
@@ -165,46 +167,54 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or "{}")
+        if self.path == "/api/live":
+            try:
+                live.apply(block_for(body["state"]), int(body.get("preview", 0)))
+                return self.send_json({"ok": True})
+            except (ValueError, OSError) as e:
+                return self.send_json({"ok": False, "msg": str(e)})
+        if self.path == "/api/save":
+            try:
+                block = block_for(body)
+            except ValueError as e:
+                return self.send_json({"ok": False, "msg": str(e)})
+            with open(STATE, "w") as f:
+                json.dump(body, f, indent=2, ensure_ascii=False)
+            try:
+                live.save(block)
+            except OSError as e:
+                return self.send_json({"ok": False, "msg": f"Réglages gardés sur le Mac, mais pas sur le clavier : {e}"})
+            return self.send_json({"ok": True, "msg": "Enregistré dans le clavier."})
         if self.path == "/api/upload":
-            yaml = to_yaml(body)
-            ok, msg = run(["validate"], yaml)
-            if not ok:
-                return self.send_json({"ok": False, "msg": msg})
-            ok, msg = run(["upload"], yaml)
-            if ok:
-                body["led"] = load_state().get("led", 0)
-                with open(STATE, "w") as f:
-                    json.dump(body, f, indent=2)
-                with open(YAML, "w") as f:
-                    f.write(yaml)
-                write_karabiner(body)
-                msg = msg or "Écrit dans le clavier"
-                if body.get("actions") and not karabiner_running():
-                    msg += " — ⚠️ Karabiner-Elements n'est pas lancé : les actions Mac ne marcheront pas"
+            try:
+                config = firmware_config(body)
+            except ValueError as e:
+                return self.send_json({"ok": False, "msg": str(e)})
+            dev = device_state()
+            if dev == "direct":                 # le firmware sait passer seul en bootloader
+                try:
+                    live.reboot_to_bootloader()
+                    for _ in range(40):
+                        time.sleep(0.25)
+                        if device_state() == "bootloader":
+                            break
+                except OSError:
+                    pass
+            if device_state() != "bootloader":
+                return self.send_json({"ok": False, "waiting": True, "msg": "Pour mettre à jour : "
+                    "maintiens la touche 1 puis appuie sur la molette 2 secondes (LED blanches), "
+                    "ou rebranche le clavier en maintenant la touche 1. L'envoi partira tout seul."})
+            ok, out = flash(config)
+            msg = "Firmware mis à jour : le clavier redémarre." if ok else \
+                  "Échec du flash : " + (out.splitlines()[-1] if out else "erreur inconnue")
             return self.send_json({"ok": ok, "msg": msg})
-        if self.path == "/api/ledshuffle":
-            # Le clavier ne reçoit pas de couleur : on lance le défilement puis on fige
-            # (mode 1) après un délai aléatoire, ce qui tombe sur une autre couleur.
-            import random, time
-            ok, msg = run(["led", "2"])
-            if ok:
-                time.sleep(random.uniform(0.6, 3.5))
-                ok, msg = run(["led", "1"])
-            return self.send_json({"ok": ok, "msg": msg or "Nouvelle couleur figée"})
-        if self.path == "/api/led":
-            mode = int(body.get("mode", 0))
-            ok, msg = run(["led", str(mode)])
-            if ok:
-                state = load_state()
-                state["led"] = mode
-                with open(STATE, "w") as f:
-                    json.dump(state, f, indent=2)
-            return self.send_json({"ok": ok, "msg": msg or f"Mode LED {mode}"})
         self.send_error(404)
 
 
 if __name__ == "__main__":
     srv = HTTPServer(("127.0.0.1", PORT), Handler)
     print(f"Macropad : http://localhost:{PORT}")
-    threading.Timer(0.5, lambda: webbrowser.open(f"http://localhost:{PORT}")).start()
+    threading.Thread(target=live.listen, args=(on_event,), daemon=True).start()
+    if "--no-browser" not in sys.argv:
+        threading.Timer(0.5, lambda: webbrowser.open(f"http://localhost:{PORT}")).start()
     srv.serve_forever()

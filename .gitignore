@@ -10,3 +10,7 @@ snap/modes/
 snap/t/
 snap/c/
 snap/f/
+events.log
+firmware/macropad.json
+firmware/*_config.bin
+firmware/*.ihx
