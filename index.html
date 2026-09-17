@@ -153,7 +153,7 @@ const CODEMAP = {Enter:"enter",Escape:"escape",Backspace:"backspace",Tab:"tab",S
   ArrowUp:"up",NumpadDivide:"numpadslash",NumpadMultiply:"numpadasterisk",NumpadSubtract:"numpadminus",
   NumpadAdd:"numpadplus",NumpadEnter:"numpadenter",NumpadDecimal:"numpaddot",NumpadEqual:"numpadequal",IntlBackslash:"grave"};
 
-const ACTIONS = [["app","Ouvrir une application"],["claude_quick","Claude — saisie rapide (⌥⌥)"],["claude","Ouvrir Terminal + Claude Code"],["dictation","Dictée Claude Code (maintenir)"],["shell","Commande shell"]];
+const ACTIONS = [["app","Ouvrir une application"],["terminal","Commande dans Terminal"],["shell","Commande en arrière-plan"]];
 let state, sel = "b0", apps = [];
 
 const $ = s => document.querySelector(s);
@@ -210,7 +210,7 @@ function paintGlow() {
 function actionLabel(id) {
   const a = state.actions[id];
   if (!a) return "";
-  return {app: "▶ " + (a.value || "Claude"), claude: "▶ Claude Code", claude_quick: "✦ Claude", dictation: "🎙 Dictée", shell: "$ " + a.value}[a.type];
+  return {app: "▶ " + (a.value || "?"), terminal: "⌨ " + (a.value || "?"), shell: "$ " + (a.value || "?")}[a.type];
 }
 
 function renderEditor() {
@@ -220,7 +220,7 @@ function renderEditor() {
     b.classList.toggle("on", b.dataset.k === kind);
     b.onclick = () => {
       if (b.dataset.k === kind) return;
-      if (b.dataset.k === "action") { state.actions[sel] = {type: "app", value: "Claude"}; renderPad(); }
+      if (b.dataset.k === "action") { state.actions[sel] = {type: "app", value: ""}; renderPad(); }
       else { delete state.actions[sel]; setVal(sel, {keys:"a", media:"play", mouse:"click"}[b.dataset.k]); }
       renderEditor();
     };
@@ -231,15 +231,13 @@ function renderEditor() {
     ed.innerHTML = `<select id="atype">${ACTIONS.map(x => `<option value="${x[0]}" ${x[0]===a.type?"selected":""}>${x[1]}</option>`).join("")}</select>
       ${a.type === "app" ? `<input type="text" id="aval" list="applist" value="${(a.value||"").replace(/"/g,"&quot;")}" placeholder="Nom de l'application">
         <datalist id="applist">${apps.map(n => `<option value="${n}">`).join("")}</datalist>` : ""}
-      ${a.type === "shell" ? `<input type="text" id="aval" value="${(a.value||"").replace(/"/g,"&quot;")}" placeholder="ex. open ~/Downloads" style="width:100%;margin-top:8px">` : ""}
+      ${a.type !== "app" ? `<input type="text" id="aval" value="${(a.value||"").replace(/"/g,"&quot;")}" placeholder="${a.type === "terminal" ? "ex. top" : "ex. open ~/Downloads"}" style="width:100%;margin-top:8px">` : ""}
       <p class="hint">${{
         app: "Ouvre l'application, ou la met au premier plan si elle est déjà ouverte.",
-        claude_quick: "Simule un double appui sur Option : ouvre la barre de saisie rapide de l'appli Claude.",
-        claude: "Ouvre une nouvelle fenêtre Terminal et y lance <code>claude</code>.",
-        dictation: "Appui court : met Terminal au premier plan. Maintenu : dicte dans Claude Code tant que la touche est enfoncée (il faut <code>/voice hold</code> activé dans Claude Code).",
+        terminal: "Ouvre une nouvelle fenêtre Terminal et y lance la commande.",
         shell: "Commande lancée par Karabiner, sans fenêtre."}[a.type]}</p>
       <p class="hint">Les actions Mac passent par Karabiner-Elements : le macropad envoie F13 à F18, et Karabiner fait l'action.</p>`;
-    $("#atype").onchange = e => { state.actions[sel] = {type: e.target.value, value: e.target.value === "app" ? "Claude" : ""}; renderPad(); renderEditor(); };
+    $("#atype").onchange = e => { state.actions[sel] = {type: e.target.value, value: ""}; renderPad(); renderEditor(); };
     const av = $("#aval"); if (av) av.oninput = e => { state.actions[sel].value = e.target.value; renderPad(); };
   } else if (kind === "media") {
     ed.innerHTML = `<select id="media">${MEDIA.map(m => `<option value="${m[0]}" ${m[0]===v?"selected":""}>${m[1]}</option>`).join("")}</select>`;

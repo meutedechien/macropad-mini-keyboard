@@ -10,8 +10,8 @@ CH57x) from macOS. Interface is in French; English notes below.*
 
 - Assigner à chaque touche et à chaque sens de la molette : une frappe clavier (jusqu'à 5 frappes
   enchaînées avec Ctrl / Maj / Option / Cmd), une touche multimédia, un clic ou une molette de souris.
-- **Actions Mac** : ouvrir une application, ouvrir Terminal et y lancer une commande, lancer une
-  commande shell quelconque, ou dicter à la voix tant que la touche est maintenue. Ces actions passent par
+- **Actions Mac** : ouvrir une application, lancer une commande dans Terminal, ou lancer une
+  commande en arrière-plan. Ces actions passent par
   [Karabiner-Elements](https://karabiner-elements.pqrs.org/) : la touche envoie F13…F18, et une règle
   limitée à ce clavier fait le reste.
 - Choisir le mode d'éclairage, avec un bouton « couleur au hasard » (voir plus bas).
@@ -31,6 +31,14 @@ Pour les actions Mac uniquement : installer Karabiner-Elements
 (`brew install --cask karabiner-elements`) et activer ses services en arrière-plan.
 
 Aucune dépendance Python : tout tient dans la bibliothèque standard.
+
+## Aller plus loin : couleurs RVB et réglage en direct (bricoleurs)
+
+La puce du clavier (WCH CH552G) peut recevoir un autre firmware. Il donne une couleur RVB au choix et
+un effet par touche (fixe, respiration, clignotement, arc-en-ciel…), le réglage en direct depuis
+l'appli, et les actions Mac sans Karabiner. Il faut ouvrir le boîtier et souder une résistance, et le
+firmware d'origine est perdu définitivement. Tout est expliqué sur la branche
+[`firmware-rgb`](https://github.com/meutedechien/macropad-mini-keyboard/tree/firmware-rgb).
 
 ## Ce qu'on a appris sur ce matériel
 

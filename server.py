@@ -75,22 +75,13 @@ def action_manipulator(slot, action):
         "from": {"key_code": FKEYS[slot], "modifiers": {"optional": ["any"]}},
         "conditions": [{"type": "device_if", "identifiers": [{"vendor_id": VID, "product_id": PID}]}],
     }
-    if t == "app":
-        m["to"] = [{"shell_command": f"open -a {shlex.quote(value or 'Claude')}"}]
-    elif t == "claude":
+    if t == "app" and value:
+        m["to"] = [{"shell_command": f"open -a {shlex.quote(value)}"}]
+    elif t == "terminal" and value:
+        script = value.replace("\\", "\\\\").replace('"', '\\"')
         m["to"] = [{"shell_command": "osascript -e 'tell application \"Terminal\"' -e 'activate' "
-                                     "-e 'do script \"claude\"' -e 'end tell'"}]
-    elif t == "claude_quick":
-        # Double appui sur Option = barre de saisie rapide de l'appli Claude
-        tap = {"key_code": "left_option", "hold_down_milliseconds": 40}
-        m["to"] = [tap, {"key_code": "vk_none", "hold_down_milliseconds": 40}, tap]
-    elif t == "dictation":
-        # Appui : Terminal au premier plan. Maintenu : Espace enfoncé tant que la touche
-        # l'est → la répétition de touche déclenche la dictée de Claude Code (/voice hold).
-        m["to"] = [{"shell_command": "open -a Terminal"}]
-        m["to_if_held_down"] = [{"key_code": "spacebar"}]
-        m["parameters"] = {"basic.to_if_held_down_threshold_milliseconds": 200}
-    elif t == "shell":
+                                     f"-e {shlex.quote('do script \"' + script + '\"')} -e 'end tell'"}]
+    elif t == "shell" and value:
         m["to"] = [{"shell_command": value}]
     else:
         return None
