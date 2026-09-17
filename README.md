@@ -15,7 +15,7 @@ and soldering a resistor once; the stock firmware cannot be restored. English no
 - **Réglage en direct** : chaque changement dans l'appli s'applique tout de suite au clavier, avec un
   aperçu de l'état « appui ». « Enregistrer » garde les réglages dans la puce.
 - **Touches** : une frappe avec modificateurs (⌘⇧C…), une touche multimédia, ou une **action Mac**
-  (ouvrir une application, lancer une commande dans Terminal ou en arrière-plan), sans Karabiner.
+  (ouvrir une application, lancer une commande dans Terminal ou en arrière-plan).
 - **Molette** lue sous interruption : aucun cran perdu, même en tournant vite.
 - **Mises à jour du firmware en un clic** depuis l'appli, sans rien débrancher.
 
@@ -60,14 +60,10 @@ Sur certains exemplaires, relier la broche 3 (P1.5) à la masse au branchement s
 ## 3. Ensuite
 
 - Tout se règle en direct dans l'appli ; **Enregistrer sur le clavier** garde les réglages.
+- Si vous utilisez déjà Karabiner-Elements, réglez-le pour ignorer ce clavier.
 - Les mises à jour du firmware se font en un clic. En secours, le clavier passe aussi en mode flash
   si on **maintient la touche 1 en le branchant**, ou **touche 1 puis appui sur la molette pendant 2 s**
   (LED blanches).
-
-## Karabiner-Elements
-
-Si Karabiner-Elements est installé, lui dire d'**ignorer ce clavier** (Karabiner → Devices). Sinon il
-en prend le contrôle exclusif et l'appli ne peut plus lui parler.
 
 ## Compiler le firmware
 
@@ -95,7 +91,7 @@ cd firmware && make          # produit macropad_rgb.bin
 
 Custom firmware for the CH552G-based 3-key + knob macropad: per-key RGB colors and effects (idle and
 pressed), live configuration over a vendor HID channel, settings stored in the chip's data flash,
-macOS actions without Karabiner, interrupt-driven knob decoding, and one-click firmware updates. The
+macOS actions, interrupt-driven knob decoding, and one-click firmware updates. The
 first flash needs the bootloader forced once: solder a 10 kΩ resistor between pin 10 (D+) and pin 12
 (VCC 5 V), plug in, flash from the app, then remove the resistor. Use a USB-A to USB-C cable.
 
